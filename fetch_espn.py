@@ -1,7 +1,7 @@
 import requests
 from sqlalchemy.orm import Session
+from db import SessionLocal, Base, engine
 from models import Team, Player
-from db import SessionLocal, engine, Base
 
 Base.metadata.create_all(bind=engine)
 
@@ -20,31 +20,38 @@ def fetch_and_store_data():
             name=team_info.get("displayName"),
             abbreviation=team_info.get("abbreviation")
         )
-        db.merge(team)  # upsert
+        db.merge(team)
         db.commit()
 
-        # Roster (lista de jogadores do time)
         roster_url = f"https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/{team.id}/roster"
         roster_resp = requests.get(roster_url).json()
 
-        # ESPN já retorna ordenado → pegamos apenas os 5 principais
-        players = roster_resp.get("athletes", [])[:5]
+        entries = roster_resp.get("entries", [])[:5]  # só os 5 principais
 
-        for player in players:
-            info = player.get("athlete", {})
+        for entry in entries:
+            player_ref = entry.get("player", {}).get("$ref")
+            if not player_ref:
+                continue
+
+            player_resp = requests.get(player_ref + "/bio").json()
+            athlete = player_resp.get("athlete")
+            if not athlete or not athlete.get("id"):
+                continue
+
             db.merge(Player(
-                id=int(info.get("id")),
-                full_name=info.get("displayName"),
-                position=info.get("position", {}).get("abbreviation"),
-                jersey=info.get("jersey"),
-                height=info.get("height"),
-                weight=info.get("weight"),
-                date_of_birth=info.get("dateOfBirth"),
-                age=info.get("age"),
-                college=(info.get("college") or {}).get("name"),
+                id=int(athlete.get("id")),
+                full_name=athlete.get("displayName"),
+                position=athlete.get("position", {}).get("abbreviation"),
+                jersey=athlete.get("jersey"),
+                height=athlete.get("height"),
+                weight=athlete.get("weight"),
+                date_of_birth=athlete.get("dateOfBirth"),
+                age=athlete.get("age"),
+                college=(athlete.get("college") or {}).get("name"),
                 team_id=team.id
             ))
 
         db.commit()
 
     db.close()
+    print("✅ Dados importados com sucesso!")

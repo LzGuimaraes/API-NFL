@@ -8,6 +8,8 @@ class Team(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
     abbreviation = Column(String, nullable=False)
+    wins = Column(Integer, default=0)
+    losses = Column(Integer, default=0)
 
     players = relationship("Player", back_populates="team", cascade="all, delete-orphan")
 
@@ -24,6 +26,7 @@ class Player(Base):
     date_of_birth = Column(String)
     age = Column(Integer)
     college = Column(String)
+    points = Column(Integer, default=0)
 
     team_id = Column(Integer, ForeignKey("teams.id"))
     team = relationship("Team", back_populates="players")
