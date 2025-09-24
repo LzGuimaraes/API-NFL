@@ -2,33 +2,90 @@ import requests
 from db import SessionLocal
 from models import Team, Player
 
-def fetch_team_standings():
-    url = "https://sports.core.api.espn.com/v2/sports/football/leagues/nfl/seasons/2025/standings"
-    resp = requests.get(url).json()
-    team_standings = {}
+def get_current_season():
+    """Detecta a temporada atual"""
+    try:
+        url = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
+        resp = requests.get(url, timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            return data.get("season", {}).get("year", 2024)
+    except:
+        pass
+    return 2024
 
-    for team_entry in resp.get('teams', []):
-        team_name = team_entry.get('team', {}).get('displayName')
-        stats = {stat['name']: stat['value'] for stat in team_entry.get('stats', [])}
-        team_standings[team_name] = {
-            'wins': stats.get('wins', 0),
-            'losses': stats.get('losses', 0)
-        }
-    return team_standings
+def fetch_team_standings():
+    season = get_current_season()
+    url = f"https://site.api.espn.com/apis/site/v2/sports/football/nfl/standings?season={season}"
+    
+    try:
+        resp = requests.get(url, timeout=15)
+        if resp.status_code != 200:
+            return {}
+        
+        data = resp.json()
+        team_standings = {}
+        
+        # Navega pela nova estrutura da API
+        children = data.get("children", [])
+        for conference in children:  # AFC/NFC
+            standings = conference.get("standings", {}).get("entries", [])
+            
+            for entry in standings:
+                team_info = entry.get("team", {})
+                team_name = team_info.get("displayName")
+                
+                # Extrai wins/losses
+                stats = entry.get("stats", [])
+                wins = losses = 0
+                
+                for stat in stats:
+                    stat_name = stat.get("name", "").lower()
+                    if "wins" in stat_name or stat_name == "w":
+                        wins = int(stat.get("value", 0))
+                    elif "losses" in stat_name or stat_name == "l":
+                        losses = int(stat.get("value", 0))
+                
+                team_standings[team_name] = {
+                    'wins': wins,
+                    'losses': losses
+                }
+        
+        return team_standings
+        
+    except Exception as e:
+        print(f"Erro ao buscar standings: {e}")
+        return {}
 
 def fetch_top_players():
-    url = "https://sports.core.api.espn.com/v2/sports/football/leagues/nfl/leaders"
-    resp = requests.get(url).json()
-    top_players = []
-
-    for player_entry in resp.get('leaders', []):
-        athlete = player_entry.get('athlete')
-        if athlete:
-            top_players.append({
-                'name': athlete.get('displayName'),
-                'points': player_entry.get('value', 0)
-            })
-    return top_players
+    season = get_current_season()
+    url = f"https://site.api.espn.com/apis/site/v2/sports/football/nfl/leaders"
+    
+    try:
+        resp = requests.get(url, timeout=10)
+        if resp.status_code != 200:
+            return []
+        
+        data = resp.json()
+        top_players = []
+        
+        # Processa líderes
+        categories = data.get("categories", [])
+        for category in categories:
+            leaders = category.get("leaders", [])
+            for leader in leaders:
+                athlete = leader.get("athlete", {})
+                if athlete:
+                    top_players.append({
+                        'name': athlete.get('displayName'),
+                        'points': leader.get('value', 0)
+                    })
+        
+        return top_players
+        
+    except Exception as e:
+        print(f"Erro ao buscar líderes: {e}")
+        return []
 
 def update_stats_in_db():
     db = SessionLocal()
@@ -44,7 +101,7 @@ def update_stats_in_db():
     for pdata in top_players:
         player = db.query(Player).filter(Player.full_name == pdata['name']).first()
         if player:
-            player.points = pdata['points']
+            player.points = int(float(pdata['points']))
 
     db.commit()
     db.close()
