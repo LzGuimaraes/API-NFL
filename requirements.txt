@@ -1,0 +1,11 @@
+# SQLAlchemy ORM
+SQLAlchemy>=2.0.0
+
+# Driver Postgres para SQLAlchemy
+psycopg2-binary>=2.9
+
+# Requests para acessar a API da ESPN
+requests>=2.31
+
+# Utilitário para criar banco no Postgres se não existir
+sqlalchemy-utils>=0.41.0
