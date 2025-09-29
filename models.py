@@ -10,6 +10,7 @@ class Team(Base):
     abbreviation = Column(String, nullable=False)
     wins = Column(Integer, default=0)
     losses = Column(Integer, default=0)
+    points = Column(Integer, default=0)
 
     players = relationship("Player", back_populates="team", cascade="all, delete-orphan")
 
